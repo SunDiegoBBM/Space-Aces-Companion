@@ -9,3 +9,4 @@ python main.py
 
 REM Venv wieder deaktivieren
 call "..\venv\Scripts\deactivate.bat"
+pause >nul

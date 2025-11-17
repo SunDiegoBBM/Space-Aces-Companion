@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QPushButton, QLabel, QStackedWidget, QSizePolicy
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 import sys
 
 from sac_pages.wiki_page import WikiPage
@@ -10,7 +10,8 @@ from sac_pages.damage_page import DamagePage
 from sac_pages.quests_page import QuestsPage
 from sac_pages.farming_page import FarmingPage
 from sac_pages.settings_page import SettingsPage
-
+from update_checker import check_for_update
+from version import APP_VERSION
 
 
 class MainWindow(QMainWindow):
@@ -427,6 +428,7 @@ def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
+    QTimer.singleShot(2000, lambda: check_for_update(window, APP_VERSION))
     sys.exit(app.exec())
 
 

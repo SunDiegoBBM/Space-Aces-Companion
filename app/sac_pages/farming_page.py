@@ -83,7 +83,7 @@ class FarmingPage(QWidget):
         box_layout = QVBoxLayout(box)
         box_layout.setContentsMargins(8, 8, 8, 8)
 
-        self.table = QTableWidget(0, 7, self)
+        self.table = QTableWidget(0, 8, self)
         self.table.setHorizontalHeaderLabels(
             [
                 "NPC",
@@ -92,6 +92,7 @@ class FarmingPage(QWidget):
                 "Uri / kill",
                 "TTK (s)",
                 "Uri / min",
+                "Uri / 10 min",
                 "Rating",
             ]
         )
@@ -275,8 +276,9 @@ class FarmingPage(QWidget):
             uri_per_hour = float(entry.get("uri_per_hour", 0.0) or 0.0)
             uri_per_min = uri_per_hour / 60.0
 
-            display_name = models.get_display_npc_name(npc, "mod" if use_mod else "vanilla")
+            display_name = models.get_display_npc_name(npc, use_mod_names=use_mod)
             rating = self._rating_for(uri_per_min, max_uri_per_min)
+            uri_per_10min = uri_per_hour / 6.0
 
             values = [
                 display_name,
@@ -285,6 +287,7 @@ class FarmingPage(QWidget):
                 f"{uri:,}",
                 f"{ttk:.2f}",
                 f"{uri_per_min:.2f}",
+                f"{uri_per_10min:.2f}",
                 rating,
             ]
             for col, val in enumerate(values):

@@ -1,596 +1,566 @@
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QTabWidget,
-    QFormLayout, QFrame, QComboBox, QSpinBox, QPushButton, QCheckBox
+    QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
+    QLabel, QFormLayout, QComboBox, QSpinBox, QPushButton,
+    QCheckBox, QGroupBox, QGridLayout, QFrame
 )
 from PySide6.QtCore import Qt
 
+from . import models
+
 
 class DamagePage(QWidget):
-    """Damage calculator with basic working logic and support for Vanilla/Mod names.
+    """
+    Damage Calculator page for Space Aces Companion.
 
-    Vereinfachungen:
-    - Ziel wird als NPC angenommen (Saturn Conqueror & Barrier relevant, Bounty Hunter ignoriert).
-    - ERS-100 Saturn-Bonus und volle PvP-Logik sind noch nicht vollständig abgebildet.
-    - Es gibt drei Laser-Gruppen (z. B. 5× LF-3 und 10× LF-4).
+    Copy to: app/sac_pages/damage_page.py
+    MainWindow import:
+        from sac_pages.damage_page import DamagePage
     """
 
-    def __init__(self, name_style: str = "vanilla"):
-        super().__init__()
-        self.language = "en"
+    def __init__(self, app_state=None, parent=None, name_style=None, **kwargs):
+        super().__init__(parent)
+        self.app_state = app_state
         self.name_style = name_style
 
-        self._init_static_data()
-        self._init_ui()
-
-    def _init_static_data(self):
-        # Laser stats: base dmg (non-upgraded), shots per second, accuracy, hidden 60 % bonus (except PR-L)
-        self.lasers = {
-            "LW3": {"base": 240.0, "sps": 1.0, "acc": 0.70, "hidden60": True},
-            "LW4": {"base": 320.0, "sps": 1.0, "acc": 0.70, "hidden60": True},
-            "LW4U": {"base": 160.0, "sps": 2.0, "acc": 0.70, "hidden60": True},
-            "PRL": {"base": 600.0, "sps": 1.0 / 2.5, "acc": 0.75, "hidden60": False},
+        self.state = {
+            "laser_groups": [
+                {"type": "LW3", "count": 10, "upgrade": 0},
+                {"type": "LW4", "count": 0, "upgrade": 0},
+                {"type": "LW4U", "count": 0, "upgrade": 0},
+            ],
+            "ammo": "LPC11",
+            "target_is_pirate": False,
+            "npc_hp": 250000,
+            "drones": {
+                "IRIS": {"count": 8, "level": 16, "design": "NONE", "lasers_per_drone": 2},
+                "APIS": {"count": 0, "level": 16, "design": "NONE", "lasers_per_drone": 2},
+                "ZEUS": {"count": 0, "level": 16, "design": "NONE", "lasers_per_drone": 2},
+            },
+            # aggregated: how many of each laser type sit on drones
+            "lasers_on_drones_by_type": {
+                "LW3": 0,
+                "LW4": 0,
+                "LW4U": 0,
+                "PRL": 0,
+            },
+            "skills": {
+                "missile_targeting": 0,
+                "rocket_engineering": 0,
+                "saturn_conqueror": 0,
+                "bounty_hunter": 0,
+            },
+            "formation": "NONE",
+            "damage_booster": 0.0,  # 0, 0.10, 0.20, 0.25
+            "language": "EN",
+            "rockets": {
+                "type": "NONE",
+            },
+            "rocket_launcher": {
+                "launcher_type": "NONE",
+                "rocket_type": "ECO10",
+                "target_is_saturn": False,
+            },
         }
 
-        # Ammo multipliers (damage only)
-        self.ammo_ids = [
-            "LPC11", "PCC25", "PCC50", "QRB101", "LSA50", "RLPC75", "HSAX", "LFR4C"
+        self._build_ui()
+        self.recalculate()
+
+    # ------------------- UI shell -------------------
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+
+        title_row = QHBoxLayout()
+        lbl_title = QLabel("Damage Calculator")
+        lbl_title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        title_row.addWidget(lbl_title)
+        title_row.addStretch()
+        lbl_sub = QLabel("Lasers • Drones • Ammo • Rockets • Modifiers")
+        lbl_sub.setStyleSheet("font-size: 11px; color: #bbbbbb;")
+        title_row.addWidget(lbl_sub)
+        root.addLayout(title_row)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setStyleSheet("color: #333333;")
+        root.addWidget(line)
+
+        content = QHBoxLayout()
+        content.setSpacing(12)
+        root.addLayout(content, 1)
+
+        self.tabs = QTabWidget()
+        self.tabs.setTabPosition(QTabWidget.North)
+        self.tabs.setStyleSheet(self._tab_stylesheet())
+        content.addWidget(self.tabs, 3)
+
+        self.results_box = self._create_results_box()
+        content.addWidget(self.results_box, 2)
+
+        self._build_lasers_tab()
+        self._build_drones_tab()
+        self._build_ammo_rockets_tab()
+        self._build_modifiers_tab()
+
+    def _tab_stylesheet(self) -> str:
+        return """
+        QTabWidget::pane {
+            border: 1px solid #333333;
+            border-radius: 10px;
+            background: #111318;
+        }
+        QTabBar::tab {
+            background: #181b22;
+            color: #d0d0d0;
+            padding: 6px 14px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            margin-right: 2px;
+            font-size: 12px;
+        }
+        QTabBar::tab:selected {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:0,
+                stop:0 #3a5bff,
+                stop:0.5 #c93aff,
+                stop:1 #3affd2
+            );
+            color: #ffffff;
+        }
+        QTabBar::tab:hover {
+            background: #222532;
+        }
+        """
+
+    def _wrap_card(self, inner_layout, title: str) -> QGroupBox:
+        box = QGroupBox(title)
+        box.setLayout(inner_layout)
+        box.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #333333;
+                border-radius: 12px;
+                margin-top: 10px;
+                padding: 8px 10px 10px 10px;
+                font-weight: 600;
+                background-color: #101018;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 14px;
+                padding: 0px 4px;
+                color: #dddddd;
+            }
+        """)
+        return box
+
+    def _create_results_box(self) -> QGroupBox:
+        lay = QVBoxLayout()
+        lay.setSpacing(8)
+
+        self.lbl_laser_dps = QLabel("Laser DPS: –")
+        self.lbl_rocket_dps = QLabel("Rocket DPS: –")
+        self.lbl_total_dps = QLabel("Total DPS: –")
+        self.lbl_ttk = QLabel("Estimated TTK: –")
+
+        for lbl in (self.lbl_laser_dps, self.lbl_rocket_dps, self.lbl_total_dps):
+            lbl.setStyleSheet("font-size: 15px;")
+        self.lbl_ttk.setStyleSheet("font-size: 13px; color: #bbbbbb;")
+
+        lay.addWidget(self.lbl_laser_dps)
+        lay.addWidget(self.lbl_rocket_dps)
+        lay.addWidget(self.lbl_total_dps)
+        lay.addSpacing(4)
+        lay.addWidget(self.lbl_ttk)
+
+        lay.addSpacing(10)
+        self.details_label = QLabel("")
+        self.details_label.setStyleSheet("font-size: 11px; color: #888888;")
+        self.details_label.setWordWrap(True)
+        lay.addWidget(self.details_label)
+
+        lay.addStretch()
+
+        btn = QPushButton("Recalculate")
+        btn.clicked.connect(self.recalculate)
+        btn.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;
+                border-radius: 6px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3a5bff,
+                    stop:0.5 #c93aff,
+                    stop:1 #3affd2
+                );
+                color: #ffffff;
+                font-weight: 600;
+            }
+        """)
+        lay.addWidget(btn, alignment=Qt.AlignRight)
+
+        box = QGroupBox("Results")
+        box.setLayout(lay)
+        box.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #333333;
+                border-radius: 16px;
+                background-color: #05060c;
+                margin-top: 8px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+                color: #dddddd;
+            }
+        """)
+        return box
+
+    # ------------------- Tabs -------------------
+
+    def _build_lasers_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(8)
+
+        headers = ["Group", "Laser type", "Count", "Upgrade level"]
+        for col, text in enumerate(headers):
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-weight: 600; color: #dddddd;")
+            grid.addWidget(lbl, 0, col)
+
+        self.laser_type_boxes = []
+        self.laser_count_boxes = []
+        self.laser_upgrade_boxes = []
+
+        for row in range(3):
+            row_index = row + 1
+            grid.addWidget(QLabel(f"Group {row_index}"), row_index, 0)
+
+            cmb = QComboBox()
+            for lid, ldef in models.LASERS.items():
+                cmb.addItem(ldef["name_en"], userData=lid)
+            cmb.setCurrentIndex(row)  # LW3, LW4, LW4U
+            cmb.currentIndexChanged.connect(self._on_laser_group_changed)
+            self.laser_type_boxes.append(cmb)
+            grid.addWidget(cmb, row_index, 1)
+
+            spn_c = QSpinBox()
+            spn_c.setRange(0, 50)
+            spn_c.setValue(self.state["laser_groups"][row]["count"])
+            spn_c.valueChanged.connect(self._on_laser_group_changed)
+            self.laser_count_boxes.append(spn_c)
+            grid.addWidget(spn_c, row_index, 2)
+
+            spn_u = QSpinBox()
+            spn_u.setRange(0, 16)
+            spn_u.setValue(self.state["laser_groups"][row]["upgrade"])
+            spn_u.valueChanged.connect(self._on_laser_group_changed)
+            self.laser_upgrade_boxes.append(spn_u)
+            grid.addWidget(spn_u, row_index, 3)
+
+        layout.addWidget(self._wrap_card(grid, "Lasers on ship"))
+
+        hp_row = QHBoxLayout()
+        hp_row.addWidget(QLabel("NPC HP for TTK:"))
+        self.spn_npc_hp = QSpinBox()
+        self.spn_npc_hp.setRange(1000, 50000000)
+        self.spn_npc_hp.setSingleStep(10000)
+        self.spn_npc_hp.setValue(self.state["npc_hp"])
+        self.spn_npc_hp.valueChanged.connect(self._on_npc_hp_changed)
+        hp_row.addWidget(self.spn_npc_hp)
+        hp_row.addStretch()
+        layout.addLayout(hp_row)
+
+        layout.addStretch()
+        self.tabs.addTab(w, "Lasers")
+
+    def _build_drones_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+
+        headers = ["Drone", "Count", "Level", "Design", "Lasers / drone"]
+        for col, text in enumerate(headers):
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-weight: 600; color: #dddddd;")
+            grid.addWidget(lbl, 0, col)
+
+        self.drone_controls = {}
+        row = 1
+        for drone_id, drone_def in models.DRONES.items():
+            grid.addWidget(QLabel(drone_def["name_en"]), row, 0)
+
+            spn_count = QSpinBox()
+            spn_count.setRange(0, drone_def["max_count"])
+            spn_count.setValue(self.state["drones"][drone_id]["count"])
+            spn_count.valueChanged.connect(self._on_drones_changed)
+            grid.addWidget(spn_count, row, 1)
+
+            spn_level = QSpinBox()
+            spn_level.setRange(1, 16)
+            spn_level.setValue(self.state["drones"][drone_id]["level"])
+            spn_level.valueChanged.connect(self._on_drones_changed)
+            grid.addWidget(spn_level, row, 2)
+
+            cmb_design = QComboBox()
+            for did, ddef in models.DRONE_DESIGNS.items():
+                cmb_design.addItem(ddef["name_en"], userData=did)
+            cmb_design.setCurrentIndex(0)
+            cmb_design.currentIndexChanged.connect(self._on_drones_changed)
+            grid.addWidget(cmb_design, row, 3)
+
+            spn_lasers = QSpinBox()
+            spn_lasers.setRange(0, drone_def["max_lasers"])
+            spn_lasers.setValue(self.state["drones"][drone_id]["lasers_per_drone"])
+            spn_lasers.valueChanged.connect(self._on_drones_changed)
+            grid.addWidget(spn_lasers, row, 4)
+
+            self.drone_controls[drone_id] = {
+                "count": spn_count,
+                "level": spn_level,
+                "design": cmb_design,
+                "lasers": spn_lasers,
+            }
+
+            row += 1
+
+        layout.addWidget(self._wrap_card(grid, "Drones and designs"))
+
+        # aggregated lasers on drones by type – table-like (Variant B)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight)
+
+        self.spn_lw3_on_drones = QSpinBox()
+        self.spn_lw3_on_drones.setRange(0, 64)
+        self.spn_lw3_on_drones.setValue(self.state["lasers_on_drones_by_type"]["LW3"])
+        self.spn_lw3_on_drones.valueChanged.connect(self._on_lasers_on_drones_changed)
+        form.addRow("LW-3 (LF-3) on drones:", self.spn_lw3_on_drones)
+
+        self.spn_lw4_on_drones = QSpinBox()
+        self.spn_lw4_on_drones.setRange(0, 64)
+        self.spn_lw4_on_drones.setValue(self.state["lasers_on_drones_by_type"]["LW4"])
+        self.spn_lw4_on_drones.valueChanged.connect(self._on_lasers_on_drones_changed)
+        form.addRow("LW-4 (LF-4) on drones:", self.spn_lw4_on_drones)
+
+        self.spn_lw4u_on_drones = QSpinBox()
+        self.spn_lw4u_on_drones.setRange(0, 64)
+        self.spn_lw4u_on_drones.setValue(self.state["lasers_on_drones_by_type"]["LW4U"])
+        self.spn_lw4u_on_drones.valueChanged.connect(self._on_lasers_on_drones_changed)
+        form.addRow("LW-4U (LF-4U) on drones:", self.spn_lw4u_on_drones)
+
+        self.spn_prl_on_drones = QSpinBox()
+        self.spn_prl_on_drones.setRange(0, 64)
+        self.spn_prl_on_drones.setValue(self.state["lasers_on_drones_by_type"]["PRL"])
+        self.spn_prl_on_drones.valueChanged.connect(self._on_lasers_on_drones_changed)
+        form.addRow("PR-L (Prometheus) on drones:", self.spn_prl_on_drones)
+
+        layout.addWidget(self._wrap_card(form, "Laser distribution on drones"))
+
+        layout.addStretch()
+        self.tabs.addTab(w, "Drones")
+
+    def _build_ammo_rockets_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        form_ammo = QFormLayout()
+        form_ammo.setLabelAlignment(Qt.AlignRight)
+
+        self.cmb_ammo = QComboBox()
+        for aid, adef in models.AMMO.items():
+            self.cmb_ammo.addItem(adef["name_en"], userData=aid)
+        self.cmb_ammo.currentIndexChanged.connect(self._on_ammo_changed)
+        form_ammo.addRow("Laser ammo:", self.cmb_ammo)
+
+        layout.addWidget(self._wrap_card(form_ammo, "Laser ammo"))
+
+        self.chk_pirate = QCheckBox("Target is Pirate faction (for L-FR4C)")
+        self.chk_pirate.stateChanged.connect(self._on_target_flags_changed)
+        layout.addWidget(self.chk_pirate)
+
+        form_rockets = QFormLayout()
+        form_rockets.setLabelAlignment(Qt.AlignRight)
+
+        self.cmb_rocket = QComboBox()
+        for rid, rdef in models.ROCKETS.items():
+            self.cmb_rocket.addItem(rdef["name_en"], userData=rid)
+        self.cmb_rocket.currentIndexChanged.connect(self._on_rocket_changed)
+        form_rockets.addRow("Standard rocket:", self.cmb_rocket)
+
+        self.cmb_launcher = QComboBox()
+        for lid, ldef in models.ROCKET_LAUNCHERS.items():
+            self.cmb_launcher.addItem(ldef["name_en"], userData=lid)
+        self.cmb_launcher.currentIndexChanged.connect(self._on_launcher_changed)
+        form_rockets.addRow("Rocket launcher:", self.cmb_launcher)
+
+        self.cmb_launcher_rocket = QComboBox()
+        for rrid, rrdef in models.RL_ROCKETS.items():
+            self.cmb_launcher_rocket.addItem(rrdef["name_en"], userData=rrid)
+        self.cmb_launcher_rocket.currentIndexChanged.connect(self._on_launcher_rocket_changed)
+        form_rockets.addRow("Launcher rocket:", self.cmb_launcher_rocket)
+
+        self.chk_saturn = QCheckBox("Target is Saturn faction (for ERS-100)")
+        self.chk_saturn.stateChanged.connect(self._on_saturn_target_changed)
+
+        layout.addWidget(self._wrap_card(form_rockets, "Rockets"))
+        layout.addWidget(self.chk_saturn)
+
+        layout.addStretch()
+        self.tabs.addTab(w, "Ammo & Rockets")
+
+    def _build_modifiers_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        form_form = QFormLayout()
+        form_form.setLabelAlignment(Qt.AlignRight)
+        self.cmb_formation = QComboBox()
+        for fid, fdef in models.FORMATIONS.items():
+            self.cmb_formation.addItem(fdef["name_en"], userData=fid)
+        self.cmb_formation.currentIndexChanged.connect(self._on_formation_changed)
+        form_form.addRow("Drone formation:", self.cmb_formation)
+        layout.addWidget(self._wrap_card(form_form, "Formation"))
+
+        booster_form = QFormLayout()
+        booster_form.setLabelAlignment(Qt.AlignRight)
+        self.cmb_booster = QComboBox()
+        self.cmb_booster.addItem("None", userData=0.0)
+        self.cmb_booster.addItem("10% damage booster", userData=0.10)
+        self.cmb_booster.addItem("20% damage booster", userData=0.20)
+        self.cmb_booster.addItem("25% damage booster", userData=0.25)
+        self.cmb_booster.currentIndexChanged.connect(self._on_booster_changed)
+        booster_form.addRow("Damage booster:", self.cmb_booster)
+        layout.addWidget(self._wrap_card(booster_form, "Boosters"))
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(6)
+
+        labels = [
+            ("Saturn Conqueror (NPC lasers)", "saturn_conqueror"),
+            ("Bounty Hunter (PvP lasers)", "bounty_hunter"),
+            ("Rocket Engineering", "rocket_engineering"),
+            ("Missile Targeting", "missile_targeting"),
         ]
 
-        # Rockets (single)
-        self.rockets = {
-            "SIM311": {"base": 3000.0, "acc": 0.95},
-            "S2S2026": {"base": 5000.0, "acc": 0.80},
-            "S2S2021": {"base": 7000.0, "acc": 0.85},
-            "S2S3030": {"base": 10000.0, "acc": 0.70},
-        }
+        self.skill_spinboxes = {}
+        for row, (label, key) in enumerate(labels):
+            grid.addWidget(QLabel(label), row, 0)
+            spn = QSpinBox()
+            spn.setRange(0, 5)
+            spn.valueChanged.connect(self._on_skills_changed)
+            grid.addWidget(spn, row, 1)
+            self.skill_spinboxes[key] = spn
 
-        # Rocketlauncher rockets
-        self.rl_rockets = {
-            "ECO10": {"base": 3500.0},
-            "HRP01": {"base": 5000.0},   # +5 % vs players – hier ignoriert
-            "ERS100": {"base": 4000.0},  # +100 % vs Saturn – hier ignoriert
-        }
+        layout.addWidget(self._wrap_card(grid, "Skill tree"))
+        layout.addStretch()
 
-    def _init_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(6, 6, 6, 6)
-        root.setSpacing(10)
+        self.tabs.addTab(w, "Modifiers")
 
-        self.heading = QLabel()
-        self.heading.setObjectName("PageTitleLabel")
-        self.heading.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    # ------------------- State handlers -------------------
 
-        self.desc = QLabel()
-        self.desc.setWordWrap(True)
+    def _on_laser_group_changed(self):
+        for idx in range(3):
+            self.state["laser_groups"][idx]["type"] = self.laser_type_boxes[idx].currentData()
+            self.state["laser_groups"][idx]["count"] = self.laser_count_boxes[idx].value()
+            self.state["laser_groups"][idx]["upgrade"] = self.laser_upgrade_boxes[idx].value()
+        self.recalculate()
 
-        root.addWidget(self.heading)
-        root.addWidget(self.desc)
+    def _on_npc_hp_changed(self, value: int):
+        self.state["npc_hp"] = value
+        self.recalculate()
 
-        # Tabs
-        self.tabs = QTabWidget()
-        root.addWidget(self.tabs)
+    def _on_drones_changed(self):
+        for drone_id, ctrls in self.drone_controls.items():
+            self.state["drones"][drone_id]["count"] = ctrls["count"].value()
+            self.state["drones"][drone_id]["level"] = ctrls["level"].value()
+            self.state["drones"][drone_id]["lasers_per_drone"] = ctrls["lasers"].value()
+            self.state["drones"][drone_id]["design"] = ctrls["design"].currentData()
+        self.recalculate()
 
-        # LASERS TAB
-        tab_lasers = QWidget()
-        lay_lasers = QVBoxLayout(tab_lasers)
-        lay_lasers.setSpacing(8)
+    def _on_lasers_on_drones_changed(self, _value: int):
+        self.state["lasers_on_drones_by_type"]["LW3"] = self.spn_lw3_on_drones.value()
+        self.state["lasers_on_drones_by_type"]["LW4"] = self.spn_lw4_on_drones.value()
+        self.state["lasers_on_drones_by_type"]["LW4U"] = self.spn_lw4u_on_drones.value()
+        self.state["lasers_on_drones_by_type"]["PRL"] = self.spn_prl_on_drones.value()
+        self.recalculate()
 
-        self.laser_info = QLabel()
-        self.laser_info.setWordWrap(True)
-        lay_lasers.addWidget(self.laser_info)
+    def _on_ammo_changed(self, _idx: int):
+        self.state["ammo"] = self.cmb_ammo.currentData()
+        self.recalculate()
 
-        self.laser_groups = []
-        form_lasers = QFormLayout()
-        form_lasers.setSpacing(4)
+    def _on_target_flags_changed(self, _state: int):
+        self.state["target_is_pirate"] = self.chk_pirate.isChecked()
+        self.recalculate()
 
-        for i in range(3):
-            combo = QComboBox()
-            spin_count = QSpinBox()
-            spin_count.setRange(0, 50)
-            spin_level = QSpinBox()
-            spin_level.setRange(0, 16)
-            self.laser_groups.append((combo, spin_count, spin_level))
-            form_lasers.addRow(f"Group {i+1} type:", combo)
-            form_lasers.addRow(f"Group {i+1} count:", spin_count)
-            form_lasers.addRow(f"Group {i+1} level:", spin_level)
+    def _on_rocket_changed(self, _idx: int):
+        self.state["rockets"]["type"] = self.cmb_rocket.currentData()
+        self.recalculate()
 
-        lay_lasers.addLayout(form_lasers)
-        self.tabs.addTab(tab_lasers, "Lasers")
+    def _on_launcher_changed(self, _idx: int):
+        self.state["rocket_launcher"]["launcher_type"] = self.cmb_launcher.currentData()
+        self.recalculate()
 
-        # AMMO TAB
-        tab_ammo = QWidget()
-        lay_ammo = QVBoxLayout(tab_ammo)
-        lay_ammo.setSpacing(8)
+    def _on_launcher_rocket_changed(self, _idx: int):
+        self.state["rocket_launcher"]["rocket_type"] = self.cmb_launcher_rocket.currentData()
+        self.recalculate()
 
-        self.ammo_info = QLabel()
-        self.ammo_info.setWordWrap(True)
-        lay_ammo.addWidget(self.ammo_info)
+    def _on_saturn_target_changed(self, _state: int):
+        self.state["rocket_launcher"]["target_is_saturn"] = self.chk_saturn.isChecked()
+        self.recalculate()
 
-        self.combo_ammo = QComboBox()
-        lay_ammo.addWidget(self.combo_ammo)
+    def _on_formation_changed(self, _idx: int):
+        self.state["formation"] = self.cmb_formation.currentData()
+        self.recalculate()
 
-        self.chk_pirate = QCheckBox("Target is pirate faction (for L-FR4C)")
-        lay_ammo.addWidget(self.chk_pirate)
+    def _on_booster_changed(self, _idx: int):
+        self.state["damage_booster"] = float(self.cmb_booster.currentData())
+        self.recalculate()
 
-        self.tabs.addTab(tab_ammo, "Ammo")
+    def _on_skills_changed(self):
+        for key, spn in self.skill_spinboxes.items():
+            self.state["skills"][key] = spn.value()
+        self.recalculate()
 
-        # ROCKETS TAB
-        tab_rockets = QWidget()
-        lay_rc = QVBoxLayout(tab_rockets)
-        lay_rc.setSpacing(8)
+    # ------------------- Calculation -------------------
 
-        self.rc_info = QLabel()
-        self.rc_info.setWordWrap(True)
-        lay_rc.addWidget(self.rc_info)
+    def recalculate(self):
+        result = models.calculate_damage_overview(self.state)
 
-        form_rc = QFormLayout()
-        self.combo_rocket = QComboBox()
-        self.spin_rocket_rate = QSpinBox()
-        self.spin_rocket_rate.setRange(0, 20)
-        self.spin_rocket_rate.setValue(0)  # 0 = ignorieren
-        form_rc.addRow("Rocket type:", self.combo_rocket)
-        form_rc.addRow("Rockets per second:", self.spin_rocket_rate)
-        lay_rc.addLayout(form_rc)
+        self.lbl_laser_dps.setText(f"Laser DPS: {result['laser_dps']:.0f}")
+        self.lbl_rocket_dps.setText(f"Rocket DPS: {result['rocket_dps']:.0f}")
+        self.lbl_total_dps.setText(f"Total DPS: {result['total_dps']:.0f}")
 
-        self.tabs.addTab(tab_rockets, "Rockets")
-
-        # ROCKETLAUNCHER TAB
-        tab_rl = QWidget()
-        lay_rl = QVBoxLayout(tab_rl)
-        lay_rl.setSpacing(8)
-
-        self.rl_info = QLabel()
-        self.rl_info.setWordWrap(True)
-        lay_rl.addWidget(self.rl_info)
-
-        form_rl = QFormLayout()
-        self.combo_rl_type = QComboBox()
-        self.combo_rl_type.addItems([
-            "HST-1 (3 rockets / 3s)",
-            "HST-2 (5 rockets / 5s)",
-        ])
-        self.combo_rl_rocket = QComboBox()
-        self.spin_rl_level = QSpinBox()
-        self.spin_rl_level.setRange(0, 16)
-        form_rl.addRow("Launcher:", self.combo_rl_type)
-        form_rl.addRow("Rocket type:", self.combo_rl_rocket)
-        form_rl.addRow("Upgrade level:", self.spin_rl_level)
-        lay_rl.addLayout(form_rl)
-
-        self.tabs.addTab(tab_rl, "Rocketlauncher")
-
-        # FORMATIONS TAB
-        tab_forms = QWidget()
-        lay_f = QVBoxLayout(tab_forms)
-        lay_f.setSpacing(8)
-
-        self.form_info = QLabel()
-        self.form_info.setWordWrap(True)
-        lay_f.addWidget(self.form_info)
-
-        self.combo_form = QComboBox()
-        self.combo_form.addItems([
-            "Turtle (-7.5% all dmg)",
-            "Arrow (+20% rocket/RL dmg)",
-            "Star (+25% rocket dmg)",
-            "Pincer (+5% PvP dmg)",
-            "Double Arrow (+30% rocket/RL dmg)",
-            "Chevron (+65% rocket/RL dmg)",
-            "Heart (-5% all dmg)",
-            "Barrier (+5% NPC dmg)",
-            "None"
-        ])
-        self.combo_form.setCurrentText("None")
-        lay_f.addWidget(self.combo_form)
-
-        self.tabs.addTab(tab_forms, "Formations")
-
-        # SKILLS TAB
-        tab_skills = QWidget()
-        lay_sk = QVBoxLayout(tab_skills)
-        lay_sk.setSpacing(8)
-
-        self.skills_info = QLabel()
-        self.skills_info.setWordWrap(True)
-        lay_sk.addWidget(self.skills_info)
-
-        form_sk = QFormLayout()
-        self.spin_skill_mt = QSpinBox()
-        self.spin_skill_mt.setRange(0, 5)
-        self.spin_skill_bh = QSpinBox()
-        self.spin_skill_bh.setRange(0, 5)
-        self.spin_skill_re = QSpinBox()
-        self.spin_skill_re.setRange(0, 5)
-        self.spin_skill_sc = QSpinBox()
-        self.spin_skill_sc.setRange(0, 5)
-
-        form_sk.addRow("Missile Targeting (0–5):", self.spin_skill_mt)
-        form_sk.addRow("Bounty Hunter (0–5):", self.spin_skill_bh)
-        form_sk.addRow("Rocket Engineering (0–5):", self.spin_skill_re)
-        form_sk.addRow("Saturn Conqueror (0–5):", self.spin_skill_sc)
-
-        lay_sk.addLayout(form_sk)
-
-        self.tabs.addTab(tab_skills, "Skills")
-
-        # Bottom: NPC HP + Results
-        bottom = QHBoxLayout()
-        bottom.setSpacing(10)
-
-        left_cfg = QFrame()
-        left_layout = QFormLayout(left_cfg)
-        left_layout.setSpacing(6)
-        self.lbl_npc_hp = QLabel("NPC HP (target):")
-        self.spin_npc_hp = QSpinBox()
-        self.spin_npc_hp.setRange(1_000, 10_000_000)
-        self.spin_npc_hp.setSingleStep(10_000)
-        self.spin_npc_hp.setValue(500_000)
-        left_layout.addRow(self.lbl_npc_hp, self.spin_npc_hp)
-
-        right_result = QFrame()
-        right_layout = QVBoxLayout(right_result)
-        right_layout.setSpacing(4)
-        self.result_title = QLabel()
-        self.result_line_laser = QLabel()
-        self.result_line_rocket = QLabel()
-        self.result_line_rl = QLabel()
-        self.result_line_total = QLabel()
-        self.result_line_ttk = QLabel()
-        self.btn_calc = QPushButton()
-        right_layout.addWidget(self.result_title)
-        right_layout.addWidget(self.result_line_laser)
-        right_layout.addWidget(self.result_line_rocket)
-        right_layout.addWidget(self.result_line_rl)
-        right_layout.addWidget(self.result_line_total)
-        right_layout.addWidget(self.result_line_ttk)
-        right_layout.addStretch()
-        right_layout.addWidget(self.btn_calc, alignment=Qt.AlignRight)
-
-        bottom.addWidget(left_cfg, 0)
-        bottom.addWidget(right_result, 1)
-
-        root.addLayout(bottom)
-
-        self.btn_calc.clicked.connect(self._on_calculate)
-
-        self.set_language(self.language)
-        self.set_name_style(self.name_style)
-
-    # ---------- Helper mapping & multipliers ----------
-
-    def _ammo_multiplier(self, ammo_id: str, is_pirate: bool) -> float:
-        if ammo_id == "LPC11":
-            return 1.0
-        if ammo_id == "PCC25":
-            return 2.0
-        if ammo_id == "PCC50":
-            return 3.0
-        if ammo_id == "QRB101":
-            return 4.0
-        if ammo_id == "LSA50":
-            return 2.0  # leech ignoriert
-        if ammo_id == "RLPC75":
-            return 6.0
-        if ammo_id == "HSAX":
-            return 3.0  # leech ignoriert
-        if ammo_id == "LFR4C":
-            return 6.0 if is_pirate else 4.0
-        return 1.0
-
-    def _skill_mult(self, levels, index):
-        if index < 0 or index >= len(levels):
-            return 0.0
-        return levels[index]
-
-    def _on_calculate(self):
-        # ------ Skill multipliers ------
-        mt_table = [0, 0.02, 0.04, 0.06, 0.08, 0.10]
-        bh_table = [0, 0.02, 0.04, 0.06, 0.08, 0.12]  # aktuell nicht genutzt
-        re_table = [0, 0.02, 0.04, 0.06, 0.08, 0.10]
-        sc_table = [0, 0.02, 0.04, 0.08, 0.16, 0.25]
-
-        lvl_mt = self.spin_skill_mt.value()
-        lvl_bh = self.spin_skill_bh.value()
-        lvl_re = self.spin_skill_re.value()
-        lvl_sc = self.spin_skill_sc.value()
-
-        missile_targeting = self._skill_mult(mt_table, lvl_mt)
-        rocket_eng = self._skill_mult(re_table, lvl_re)
-        saturn_conq = self._skill_mult(sc_table, lvl_sc)
-        # bounty_hunter = self._skill_mult(bh_table, lvl_bh)  # für PvP, hier ignoriert
-
-        # ------ Formation multipliers ------
-        form_text = self.combo_form.currentText()
-        dmg_all_mult = 1.0
-        rocket_mult = 1.0
-        npc_mult = 1.0
-
-        if "Turtle" in form_text:
-            dmg_all_mult *= 0.925
-        if "Heart" in form_text:
-            dmg_all_mult *= 0.95
-        if "Arrow" in form_text and "Double" not in form_text:
-            rocket_mult *= 1.20
-        if "Star" in form_text:
-            rocket_mult *= 1.25
-        if "Double Arrow" in form_text:
-            rocket_mult *= 1.30
-        if "Chevron" in form_text:
-            rocket_mult *= 1.65
-        if "Barrier" in form_text:
-            npc_mult *= 1.05
-        # Pincer = PvP, ignoriert
-
-        laser_damage_mult = dmg_all_mult * npc_mult * (1.0 + saturn_conq)
-        rocket_damage_mult = dmg_all_mult * rocket_mult * (1.0 + rocket_eng)
-        rl_damage_mult = dmg_all_mult * rocket_mult * (1.0 + rocket_eng)
-
-        # ------ Lasers ------
-        # map display names to internal ids
-        if self.name_style == "vanilla":
-            laser_map = {
-                "LW-3": "LW3",
-                "LW-4": "LW4",
-                "LW-4U": "LW4U",
-                "PR-L": "PRL",
-            }
+        if result["ttk_seconds"] > 0:
+            self.lbl_ttk.setText(
+                f"Estimated TTK vs NPC ({self.state['npc_hp']:,} HP): {result['ttk_seconds']:.1f} s"
+            )
         else:
-            laser_map = {
-                "LF-3": "LW3",
-                "LF-4": "LW4",
-                "LF-4U": "LW4U",
-                "Prometheus": "PRL",
-            }
+            self.lbl_ttk.setText("Estimated TTK: – (no damage)")
 
-        # ensure data present
-        total_laser_dps = 0.0
-
-        # ammo
-        is_pirate = self.chk_pirate.isChecked()
-        ammo_idx = self.combo_ammo.currentIndex()
-        ammo_id = self.ammo_ids[ammo_idx] if 0 <= ammo_idx < len(self.ammo_ids) else "LPC11"
-        ammo_mult = self._ammo_multiplier(ammo_id, is_pirate)
-
-        for combo, spin_count, spin_level in self.laser_groups:
-            count = spin_count.value()
-            if count <= 0:
-                continue
-            disp_name = combo.currentText()
-            laser_id = laser_map.get(disp_name)
-            if not laser_id or laser_id not in self.lasers:
-                continue
-            info = self.lasers[laser_id]
-            base = info["base"]
-            level = spin_level.value()
-            # Upgrade: +0.5 % pro Level
-            base_upgraded = base * (1.0 + 0.005 * level)
-            if info["hidden60"]:
-                base_upgraded *= 1.6
-            group_base = base_upgraded * count  # pro Schuss/Salve
-
-            acc = info["acc"]
-            sps = info["sps"]
-
-            dmg_per_shot = group_base * ammo_mult * laser_damage_mult
-            dmg_per_hit = dmg_per_shot * acc
-            dps = dmg_per_hit * sps
-
-            total_laser_dps += dps
-
-        # ------ Rockets (single) ------
-        total_rocket_dps = 0.0
-        rocket_key = None
-        if self.spin_rocket_rate.value() > 0:
-            # map names
-            if self.name_style == "vanilla":
-                rocket_map = {
-                    "SIM-311": "SIM311",
-                    "S2S-2026": "S2S2026",
-                    "S2S-2021": "S2S2021",
-                    "S2S-3030": "S2S3030",
-                }
-            else:
-                rocket_map = {
-                    "R-310": "SIM311",
-                    "PLT-2026": "S2S2026",
-                    "PLT-2021": "S2S2021",
-                    "PLT-3030": "S2S3030",
-                }
-            disp_rc = self.combo_rocket.currentText()
-            rocket_key = rocket_map.get(disp_rc)
-            if rocket_key and rocket_key in self.rockets:
-                info_rc = self.rockets[rocket_key]
-                base_rc = info_rc["base"] * rocket_damage_mult
-                acc_rc = info_rc["acc"]
-                acc_rc_eff = min(1.0, acc_rc * (1.0 + missile_targeting))
-                rps = float(self.spin_rocket_rate.value())
-                total_rocket_dps = base_rc * acc_rc_eff * rps
-
-        # ------ Rocketlauncher ------
-        total_rl_dps = 0.0
-        # map RL rocket names
-        if self.name_style == "vanilla":
-            rl_map = {
-                "ECO-10": "ECO10",
-                "HRP-01": "HRP01",
-                "ERS-100": "ERS100",
-            }
-        else:
-            rl_map = {
-                "ECO-10": "ECO10",
-                "HSTRM-01": "HRP01",
-                "UBR-10": "ERS100",
-            }
-
-        disp_rl_rocket = self.combo_rl_rocket.currentText()
-        rl_rocket_id = rl_map.get(disp_rl_rocket)
-        if rl_rocket_id and rl_rocket_id in self.rl_rockets:
-            base_rl = self.rl_rockets[rl_rocket_id]["base"]
-            # RL upgrade-level: +0.5 % pro Level
-            rl_level = self.spin_rl_level.value()
-            base_rl_up = base_rl * (1.0 + 0.005 * rl_level)
-            base_rl_up *= rl_damage_mult
-
-            # launcher fire rate
-            disp_launcher = self.combo_rl_type.currentText()
-            if "HST-1" in disp_launcher:
-                rockets_per_salvo = 3
-                cooldown = 3.0
-            else:
-                rockets_per_salvo = 5
-                cooldown = 5.0
-            rockets_per_second = rockets_per_salvo / cooldown if cooldown > 0 else 0.0
-            total_rl_dps = base_rl_up * rockets_per_second
-
-        # ------ Total & TTK ------
-        total_dps = total_laser_dps + total_rocket_dps + total_rl_dps
-        npc_hp = float(self.spin_npc_hp.value())
-        ttk = npc_hp / total_dps if total_dps > 0 else 0.0
-
-        # Output
-        if self.language == "de":
-            self.result_line_laser.setText(f"Laser DPS: {total_laser_dps:,.0f}".replace(",", "."))
-            self.result_line_rocket.setText(f"Raketen DPS: {total_rocket_dps:,.0f}".replace(",", "."))
-            self.result_line_rl.setText(f"Rocketlauncher DPS: {total_rl_dps:,.0f}".replace(",", "."))
-            self.result_line_total.setText(f"Gesamt DPS: {total_dps:,.0f}".replace(",", "."))
-            self.result_line_ttk.setText(f"Geschätzte Zeit bis zum Kill: {ttk:,.1f} Sekunden".replace(",", "."))
-        else:
-            self.result_line_laser.setText(f"Laser DPS: {total_laser_dps:,.0f}")
-            self.result_line_rocket.setText(f"Rocket DPS: {total_rocket_dps:,.0f}")
-            self.result_line_rl.setText(f"Rocketlauncher DPS: {total_rl_dps:,.0f}")
-            self.result_line_total.setText(f"Total DPS: {total_dps:,.0f}")
-            self.result_line_ttk.setText(f"Estimated time to kill: {ttk:,.1f} seconds")
-
-    def set_name_style(self, style: str):
-        self.name_style = style
-
-        # Lasers
-        for combo, _, _ in self.laser_groups:
-            combo.clear()
-            if style == "vanilla":
-                combo.addItems(["LW-3", "LW-4", "LW-4U", "PR-L"])
-            else:
-                combo.addItems(["LF-3", "LF-4", "LF-4U", "Prometheus"])
-
-        # Ammo
-        self.combo_ammo.clear()
-        if style == "vanilla":
-            self.combo_ammo.addItems([
-                "LPC-11",
-                "PCC-25",
-                "PCC-50",
-                "QRB-101",
-                "LSA-50",
-                "RLPC-75",
-                "HSA-X",
-                "L-FR4C",
-            ])
-        else:
-            self.combo_ammo.addItems([
-                "LCB-10",
-                "MCB-25",
-                "MCB-50",
-                "UCB-100",
-                "SAB-50",
-                "RSB-75",
-                "CBO-100",
-                "L-FR4C",
-            ])
-
-        # rockets
-        self.combo_rocket.clear()
-        if style == "vanilla":
-            self.combo_rocket.addItems([
-                "SIM-311",
-                "S2S-2026",
-                "S2S-2021",
-                "S2S-3030",
-            ])
-        else:
-            self.combo_rocket.addItems([
-                "R-310",
-                "PLT-2026",
-                "PLT-2021",
-                "PLT-3030",
-            ])
-
-        # RL rockets
-        self.combo_rl_rocket.clear()
-        if style == "vanilla":
-            self.combo_rl_rocket.addItems([
-                "ECO-10",
-                "HRP-01",
-                "ERS-100",
-            ])
-        else:
-            self.combo_rl_rocket.addItems([
-                "ECO-10",
-                "HSTRM-01",
-                "UBR-10",
-            ])
-
-    def set_language(self, lang: str):
-        self.language = lang
-        if lang == "de":
-            self.heading.setText("Schadensrechner")
-            self.desc.setText(
-                "Berechnet Laser-, Raketen- und Rocketlauncher-DPS basierend auf deinem Setup. "
-                "Derzeit wird von einem NPC-Ziel ausgegangen (Saturn Conqueror / Barrier werden berücksichtigt)."
-            )
-            self.laser_info.setText(
-                "Laser-Gruppen: Wähle für jede Gruppe Typ, Anzahl und Upgrade-Level. "
-                "Beispiel: Gruppe 1 = 5× LF-3, Gruppe 2 = 10× LF-4."
-            )
-            self.ammo_info.setText(
-                "Munition: Wähle den Munitionstyp. L-FR4C verwendet unterschiedliche Multiplikatoren "
-                "gegen Piraten- und andere Ziele."
-            )
-            self.rc_info.setText(
-                "Raketen: Schaden basiert auf Raketen-Typ, Genauigkeit, Missile Targeting und Feuerrate."
-            )
-            self.rl_info.setText(
-                "Rocketlauncher: HST-1/HST-2 mit verschiedenen Raketen und Upgrade-Leveln."
-            )
-            self.form_info.setText(
-                "Formationen beeinflussen Laser-, Raketen- und NPC-Schaden. Pincer wird aktuell ignoriert, "
-                "da er nur PvP betrifft."
-            )
-            self.skills_info.setText(
-                "Skilltree: Missile Targeting beeinflusst Raketen-Genauigkeit, Rocket Engineering die Raketen- "
-                "und Rocketlauncher-Schaden, Saturn Conqueror den NPC-Laser-Schaden."
-            )
-            self.lbl_npc_hp.setText("NPC-HP (Ziel):")
-            self.result_title.setText("Ergebnisse")
-            self.btn_calc.setText("Berechnen")
-        else:
-            self.heading.setText("Damage Calculator")
-            self.desc.setText(
-                "Calculates laser, rocket and rocketlauncher DPS based on your setup. "
-                "Currently assumes an NPC target (Saturn Conqueror / Barrier are applied)."
-            )
-            self.laser_info.setText(
-                "Laser groups: for each group, choose type, count and upgrade level. "
-                "Example: group 1 = 5× LF-3, group 2 = 10× LF-4."
-            )
-            self.ammo_info.setText(
-                "Ammo: choose the ammunition type. L-FR4C uses different multipliers "
-                "against pirate vs other targets."
-            )
-            self.rc_info.setText(
-                "Rockets: damage based on rocket type, accuracy, Missile Targeting and fire rate."
-            )
-            self.rl_info.setText(
-                "Rocketlauncher: HST-1/HST-2 with different rockets and upgrade levels."
-            )
-            self.form_info.setText(
-                "Formations affect laser, rocket and NPC damage. Pincer is currently ignored "
-                "since it is PvP-only."
-            )
-            self.skills_info.setText(
-                "Skilltree: Missile Targeting affects rocket accuracy, Rocket Engineering boosts "
-                "rocket and launcher damage, Saturn Conqueror boosts laser damage vs NPCs."
-            )
-            self.lbl_npc_hp.setText("NPC HP (target):")
-            self.result_title.setText("Results")
-            self.btn_calc.setText("Calculate")
+        details = []
+        details.append(f"Effective laser multiplier (drones + formation + skills + booster): x{result['laser_multiplier']:.3f}")
+        details.append(f"Lasers on drones: {result['lasers_on_drones']} / {result['total_lasers']} (approx.)")
+        details.append(f"Drones contributing to damage: {result['drone_count']}")
+        details.append(f"Rocket DPS contribution: {result['rocket_dps']:.0f}")
+        details.append(f"Damage booster: {int(self.state['damage_booster'] * 100)} %")
+        self.details_label.setText("\n".join(details))

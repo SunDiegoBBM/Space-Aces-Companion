@@ -1,120 +1,149 @@
-# Space Aces Companion
+Space Aces Companion
 
-A modern, user-friendly desktop companion app for **Space Aces**, built with Python and PySide6.  
-The tool provides quick access to game information, calculators, and utilities — all in one clean interface.
+A modern, user-friendly desktop companion app for Space Aces, built with Python and PySide6.
+The application provides quick access to game information, calculators and utility modules in a clean, efficient interface.
 
----
+Features (Work in Progress)
+Navigation and Layout
 
-## 🚀 Features (Work in Progress)
+Clean, modular page system
 
-### ✔️ Dashboards & Navigation
-A modern, space-themed interface with:
-- Clickable navigation panel
-- Modular page system (`Wiki`, `Damage Calculator`, `Quest Helper`, `Farming Guide`, `Settings`)
-- Optional RGB UI elements
+Sidebar navigation for quick access
 
----
+Pages: Wiki, Damage Calculator, Quest Helper, Farming Guide, Settings
 
-## 📘 Current Modules
+Optional RGB-themed interface elements
 
-### 1. **Wiki (WIP)**
-Provides structured information about:
-- Ships  
-- NPCs  
-- Items  
-- Lasers  
-- Maps  
-- Drones & formations  
+Current Modules
+1. Wiki (Work in Progress)
 
-Data is designed to come from configurable JSON files for easy editing.
+Provides structured data for:
 
----
+Ships
 
-### 2. **Damage Calculator (In Development)**
-Advanced damage simulation based on:
-- Equipped lasers (mixed setups supported)  
-- Ammo types  
-- Rocket & rocket launcher damage  
-- Drone formations  
-- Skill tree levels  
-- Upgrade levels  
+NPCs
 
-Also includes support for MOD mode:
-- `LW-3 = LF-3`
-- `LW-4 = LF-4`
-- `LW-4U = LF-4U`
-- `PR-L = Prometheus`
-- Ammo equivalences are also supported.
+Items
 
----
+Lasers
 
-### 3. **Quest Helper (WIP)**
+Maps
+
+Drones and formations
+
+Data is loaded from editable JSON files to allow easy updates and community contributions.
+
+2. Damage Calculator (In Development)
+
+Supports detailed damage simulation based on:
+
+Mixed laser setups (ship and drone lasers separated)
+
+Ammo types
+
+Rockets and rocket launcher damage
+
+Drone formations
+
+Skill tree effects
+
+Upgrade levels
+
+Includes MOD mode mapping for renamed items:
+
+LW-3 → LF-3
+
+LW-4 → LF-4
+
+LW-4U → LF-4U
+
+PR-L → Prometheus
+
+3. Quest Helper (Work in Progress)
+
 Displays:
-- Quest descriptions  
-- Objectives  
-- Maps  
-- Rewards  
 
-Designed for quick lookup without switching to the browser.
+Quest descriptions
 
----
+Objectives
 
-### 4. **NPC Farming Guide (Planned)**
-Will allow players to input their:
-- Ship loadout  
-- Skilltree  
-- Boosters  
-- Formation  
-- Damage
+Required maps
 
-The tool calculates:
-- The most efficient NPC to farm  
-- Uri per damage  
-- Time-to-kill estimations  
+Rewards
 
----
+Designed for fast lookup without leaving the game.
 
-### 5. **Settings**
+4. NPC Farming Guide (Functional)
+
+Allows input of:
+
+Ship setup
+
+Skill tree
+
+Boosters
+
+Drone formation
+
+Damage values
+
+Calculates:
+
+Uri per second
+
+Uri per minute
+
+Uri per hour
+
+Time-to-kill estimates
+
+NPC efficiency ranking
+
+5. Settings
+
 Includes:
-- Language selection (EN/DE)
-- MOD mode toggle (changes weapon names)
-- RGB UI toggle
 
----
+Language selection (EN/DE)
 
-## 🛠️ Tech Stack
+MOD mode toggle
 
-- **Python 3.12**
-- **PySide6 (Qt for Python)**
-- Modular folder structure for scalable development
-- Single-file executable export via PyInstaller
+RGB interface toggle
 
----
-## 💬 Credits
+Tech Stack
 
-**Developer:** SunDiegoBBM  
-**Project:** Space Aces unofficial companion tool  
-Not affiliated with the official Space Aces developers.
+Python 3.12
 
----
+PySide6 (Qt for Python)
 
-## ⚠️ Disclaimer
+Modular folder architecture
 
-This is a **non-commercial fan project**.  
-Before distributing advanced features (automated parsing, in-game overlays), permission from the game owner is required.
+PyInstaller for EXE builds
 
-The tool does not modify the game client and does not interact with game memory.
+Support the Project
 
----
+If you want to support development, you can do so here:
+https://ko-fi.com/sundiegobbm
 
-## ⭐ Future Goals
+Credits
 
-- Auto-updating system  
-- More calculators (shield, speed, cooldown)  
-- Full NPC + map wiki
-- Theme customization  
-- Better TTK simulations and DPS graphs  
+Developer: SunDiegoBBM
+Project: Unofficial Space Aces Companion App
+This project is not affiliated with the official Space Aces developers or owners.
 
----
+Disclaimer
 
-If you like the project, feel free to ⭐ star the repository!
+This is a non-commercial fan project.
+The tool does not modify the game client or interact with game memory.
+Before distributing automation features or overlays, permission from the game owner may be required.
+
+Planned Features
+
+Auto-updater system
+
+Extended wiki content
+
+Additional calculators (shield, speed, cooldown)
+
+DPS graphs and advanced TTK analytics
+
+Theme customization options

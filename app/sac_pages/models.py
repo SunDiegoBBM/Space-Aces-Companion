@@ -10,6 +10,7 @@ Drop this into app/sac_pages/models.py and import it as:
 import math
 import json
 import os
+import sys
 
 # ------------------------------------------------------------------
 # Laser definitions
@@ -636,36 +637,67 @@ def _get_data_dir() -> str:
 
 def load_npcs() -> list:
     """
-    Load NPC definitions from app/data/npcs.json.
-    Returns a list of NPC objects.
+    Load NPC definitions from npcs.json.
+
+    - Dev mode (python main.py in app/):
+        app/data/npcs.json
+    - EXE mode (SpaceAcesCompanion.exe im dist-Ordner):
+        npcs.json im gleichen Ordner wie die EXE
     """
-    data_dir = _get_data_dir()
-    npc_file = os.path.join(data_dir, "npcs.json")
+    if getattr(sys, "frozen", False):
+        # Running as bundled EXE -> use folder of the .exe
+        base_dir = os.path.dirname(sys.executable)
+        npc_file = os.path.join(base_dir, "npcs.json")
+        mode = "EXE"
+    else:
+        # Dev mode -> use app/data
+        data_dir = _get_data_dir()  # das zeigt bei dir auf app/data
+        npc_file = os.path.join(data_dir, "npcs.json")
+        mode = "DEV"
+
+    print(f"[load_npcs] mode={mode}, npc_file={npc_file}, exists={os.path.exists(npc_file)}")
+
     if not os.path.exists(npc_file):
         return []
 
     try:
         with open(npc_file, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception:
+            txt = f.read()
+    except Exception as e:
+        print("[load_npcs] ERROR reading file:", repr(e))
         return []
+
+    print("[load_npcs] file length (chars):", len(txt))
+
+    try:
+        raw = json.loads(txt)
+    except Exception as e:
+        print("[load_npcs] ERROR parsing JSON:", repr(e))
+        return []
+
+    if isinstance(raw, list):
+        print("[load_npcs] raw is list, len:", len(raw))
+    else:
+        print("[load_npcs] raw type is:", type(raw))
 
     npcs = []
     for entry in raw:
         try:
-            npcs.append(
-                NPC(
-                    npc_id=entry["id"],
-                    name=entry["name"],
-                    map_id=entry.get("map", ""),
-                    health=entry.get("health", 0),
-                    shields=entry.get("shields", 0),
-                    reward_uri=entry.get("reward_uri", 0),
-                    reward_credits=entry.get("reward_credits", 0),
-                )
+            npc = NPC(
+                npc_id=entry["id"],
+                name=entry["name"],
+                map_id=entry.get("map", ""),
+                health=entry.get("health", 0),
+                shields=entry.get("shields", 0),
+                reward_uri=entry.get("reward_uri", 0),
+                reward_credits=entry.get("reward_credits", 0),
             )
-        except KeyError:
+            npcs.append(npc)
+        except KeyError as e:
+            print("[load_npcs] Skipping entry due to KeyError:", e, "entry:", entry)
             continue
+
+    print("[load_npcs] final NPC count:", len(npcs))
     return npcs
 
 

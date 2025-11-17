@@ -132,6 +132,17 @@ class FarmingPage(QWidget):
 
         self.set_language(self.language)
 
+        # Debug / status: show how many NPCs were loaded
+        self.npc_status_label = QLabel("")
+        self.npc_status_label.setStyleSheet("color: #555555; font-size: 9px;")
+        layout.addWidget(self.npc_status_label)
+
+        layout.addStretch()
+
+        self.set_language(self.language)
+        self._update_npc_status()
+
+
     # ------------------- Helpers -------------------
 
     def _get_active_dps(self) -> float:
@@ -147,6 +158,9 @@ class FarmingPage(QWidget):
         if not isinstance(self.app_state, dict):
             self.build_label.setText("")
             return
+    def _update_npc_status(self):
+        count = len(self.npcs) if isinstance(self.npcs, list) else 0
+        self.npc_status_label.setText(f"Loaded NPCs: {count}")
 
         res = self.app_state.get("last_damage_result") or {}
         state = self.app_state.get("last_damage_state") or {}

@@ -1,0 +1,18 @@
+# Build output
+dist/
+build/
+*.spec
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Executables
+*.exe
+
+# Sonstiges
+Thumbs.db
+Desktop.ini

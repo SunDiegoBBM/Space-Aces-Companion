@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
         self.language = "en"
         self.rgb_enabled = True
         self.name_style = "vanilla"  # or "mod"
+        self.app_state = {}
 
         self._init_translations()
         self._init_ui()
@@ -130,9 +131,9 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.page_wiki = WikiPage()
-        self.page_damage = DamagePage(name_style=self.name_style)
+        self.page_damage = DamagePage(app_state=self.app_state, name_style=self.name_style)
         self.page_quests = QuestsPage()
-        self.page_farm = FarmingPage()
+        self.page_farm = FarmingPage(app_state=self.app_state, name_style=self.name_style)
         self.page_settings = SettingsPage(
             on_language_change=self.set_language,
             on_rgb_toggle=self.set_rgb_enabled,
@@ -215,6 +216,8 @@ class MainWindow(QMainWindow):
         self.name_style = style
         if hasattr(self.page_damage, "set_name_style"):
             self.page_damage.set_name_style(style)
+        if hasattr(self.page_farm, "set_name_style"):
+            self.page_farm.set_name_style(style)
 
     def _apply_language(self):
         tr = self.translations[self.language]
@@ -230,6 +233,30 @@ class MainWindow(QMainWindow):
         self.footer_app_label.setText(tr["footer_app"])
         self.footer_dev_label.setText(tr["footer_dev"])
 
+
+
+    def open_farming_guide(self, dps: float | None = None):
+        """
+        Wird vom Damage Calculator aufgerufen, um direkt in den Farming-Guide
+        zu springen. Optional kann ein DPS-Wert übergeben werden, der im
+        app_state abgelegt wird.
+        """
+        if dps is not None:
+            if isinstance(self.app_state, dict):
+                last = self.app_state.get("last_damage_result") or {}
+                last["total_dps"] = float(dps)
+                self.app_state["last_damage_result"] = last
+
+        # auf Farming-Seite umschalten
+        self._switch_page(3, "farming")
+
+        # Farming-Page neu berechnen lassen
+        if hasattr(self.page_farm, "recalculate"):
+            try:
+                self.page_farm.recalculate()
+            except TypeError:
+                # alte Signatur ohne Parameter
+                self.page_farm.recalculate()
     def _apply_style(self):
         if self.rgb_enabled:
             stylesheet = """

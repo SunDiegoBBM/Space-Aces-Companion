@@ -64,6 +64,7 @@ class DamagePage(QWidget):
         }
 
         self._build_ui()
+        self._update_drone_slots_info()
         self.recalculate()
 
     # ------------------- UI shell -------------------
@@ -183,6 +184,21 @@ class DamagePage(QWidget):
 
         lay.addStretch()
 
+        btn_use = QPushButton("Use in Farming Guide")
+        btn_use.clicked.connect(self._go_to_farming_guide)
+        btn_use.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;
+                border-radius: 6px;
+                background-color: #4455aa;
+                color: #ffffff;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #5566cc;
+            }
+        """)
+
         btn = QPushButton("Recalculate")
         btn.clicked.connect(self.recalculate)
         btn.setStyleSheet("""
@@ -199,7 +215,13 @@ class DamagePage(QWidget):
                 font-weight: 600;
             }
         """)
-        lay.addWidget(btn, alignment=Qt.AlignRight)
+
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(btn_use)
+        row.addWidget(btn)
+
+        lay.addLayout(row)
 
         box = QGroupBox("Results")
         box.setLayout(lay)
@@ -219,6 +241,37 @@ class DamagePage(QWidget):
             }
         """)
         return box
+
+    
+
+    # ------------------- Farming Guide integration -------------------
+
+    def _go_to_farming_guide(self):
+        """
+        Speichert aktuelles Ergebnis im app_state und wechselt zur Farming-Seite,
+        falls das MainWindow eine open_farming_guide()-Methode besitzt.
+        """
+        # Stelle sicher, dass das Ergebnis aktuell ist
+        result = models.calculate_damage_overview(self.state)
+
+        if self.app_state is not None:
+            self.app_state["last_damage_state"] = dict(self.state)
+            self.app_state["last_damage_result"] = dict(result)
+
+        parent = self.parent()
+        # Nach oben laufen, bis ein Objekt mit open_farming_guide gefunden wird
+        visited = set()
+        while parent is not None and id(parent) not in visited:
+            visited.add(id(parent))
+            if hasattr(parent, "open_farming_guide"):
+                try:
+                    parent.open_farming_guide()
+                except TypeError:
+                    # Falls die Methode ein Argument erwartet, DPS übergeben
+                    parent.open_farming_guide(result.get("total_dps", 0.0))
+                break
+            parent = parent.parent()
+
 
     # ------------------- Tabs -------------------
 
@@ -294,7 +347,7 @@ class DamagePage(QWidget):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(6)
 
-        headers = ["Drone", "Count", "Level", "Design", "Lasers / drone"]
+        headers = ["Drone", "Count", "Level", "Design"]
         for col, text in enumerate(headers):
             lbl = QLabel(text)
             lbl.setStyleSheet("font-weight: 600; color: #dddddd;")
@@ -324,17 +377,10 @@ class DamagePage(QWidget):
             cmb_design.currentIndexChanged.connect(self._on_drones_changed)
             grid.addWidget(cmb_design, row, 3)
 
-            spn_lasers = QSpinBox()
-            spn_lasers.setRange(0, drone_def["max_lasers"])
-            spn_lasers.setValue(self.state["drones"][drone_id]["lasers_per_drone"])
-            spn_lasers.valueChanged.connect(self._on_drones_changed)
-            grid.addWidget(spn_lasers, row, 4)
-
             self.drone_controls[drone_id] = {
                 "count": spn_count,
                 "level": spn_level,
                 "design": cmb_design,
-                "lasers": spn_lasers,
             }
 
             row += 1
@@ -369,7 +415,15 @@ class DamagePage(QWidget):
         self.spn_prl_on_drones.valueChanged.connect(self._on_lasers_on_drones_changed)
         form.addRow("PR-L (Prometheus) on drones:", self.spn_prl_on_drones)
 
-        layout.addWidget(self._wrap_card(form, "Laser distribution on drones"))
+        inner = QVBoxLayout()
+        inner.setSpacing(6)
+        inner.addLayout(form)
+
+        self.lbl_drone_slots_info = QLabel("")
+        self.lbl_drone_slots_info.setStyleSheet("font-size: 11px; color: #aaaaaa;")
+        inner.addWidget(self.lbl_drone_slots_info)
+
+        layout.addWidget(self._wrap_card(inner, "Drone lasers (total)"))
 
         layout.addStretch()
         self.tabs.addTab(w, "Drones")
@@ -493,8 +547,8 @@ class DamagePage(QWidget):
         for drone_id, ctrls in self.drone_controls.items():
             self.state["drones"][drone_id]["count"] = ctrls["count"].value()
             self.state["drones"][drone_id]["level"] = ctrls["level"].value()
-            self.state["drones"][drone_id]["lasers_per_drone"] = ctrls["lasers"].value()
             self.state["drones"][drone_id]["design"] = ctrls["design"].currentData()
+        self._update_drone_slots_info()
         self.recalculate()
 
     def _on_lasers_on_drones_changed(self, _value: int):
@@ -502,7 +556,38 @@ class DamagePage(QWidget):
         self.state["lasers_on_drones_by_type"]["LW4"] = self.spn_lw4_on_drones.value()
         self.state["lasers_on_drones_by_type"]["LW4U"] = self.spn_lw4u_on_drones.value()
         self.state["lasers_on_drones_by_type"]["PRL"] = self.spn_prl_on_drones.value()
+        self._update_drone_slots_info()
         self.recalculate()
+
+    def _update_drone_slots_info(self):
+        """
+        Update label that shows how many drone laser slots are used vs. available.
+        """
+        if not hasattr(self, "lbl_drone_slots_info"):
+            return
+
+        drones_cfg = self.state.get("drones", {})
+        total_slots = 0
+        for drone_id, d in drones_cfg.items():
+            drone_def = models.DRONES.get(drone_id)
+            if not drone_def:
+                continue
+            count = int(d.get("count", 0) or 0)
+            total_slots += count * int(drone_def.get("max_lasers", 0) or 0)
+
+        used_slots = sum(int(v or 0) for v in self.state.get("lasers_on_drones_by_type", {}).values())
+
+        text = f"Drone laser slots used: {used_slots} / {total_slots}"
+        if total_slots > 0:
+            if used_slots > total_slots:
+                text += " (too many – some lasers will be ignored in the calculation)"
+            elif used_slots < total_slots:
+                text += " (free slots remaining)"
+            else:
+                text += " (all slots used)"
+
+        self.lbl_drone_slots_info.setText(text)
+
 
     def _on_ammo_changed(self, _idx: int):
         self.state["ammo"] = self.cmb_ammo.currentData()
@@ -543,8 +628,14 @@ class DamagePage(QWidget):
 
     # ------------------- Calculation -------------------
 
+    
     def recalculate(self):
         result = models.calculate_damage_overview(self.state)
+
+        # Save last result for Farming Guide
+        if self.app_state is not None:
+            self.app_state["last_damage_state"] = dict(self.state)
+            self.app_state["last_damage_result"] = dict(result)
 
         self.lbl_laser_dps.setText(f"Laser DPS: {result['laser_dps']:.0f}")
         self.lbl_rocket_dps.setText(f"Rocket DPS: {result['rocket_dps']:.0f}")
@@ -558,7 +649,7 @@ class DamagePage(QWidget):
             self.lbl_ttk.setText("Estimated TTK: – (no damage)")
 
         details = []
-        details.append(f"Effective laser multiplier (drones + formation + skills + booster): x{result['laser_multiplier']:.3f}")
+        details.append(f"Effective laser multiplier (drones + fo...rmation + skills + booster): x{result['laser_multiplier']:.3f}")
         details.append(f"Lasers on drones: {result['lasers_on_drones']} / {result['total_lasers']} (approx.)")
         details.append(f"Drones contributing to damage: {result['drone_count']}")
         details.append(f"Rocket DPS contribution: {result['rocket_dps']:.0f}")

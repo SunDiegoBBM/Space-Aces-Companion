@@ -1,29 +1,33 @@
 
 """
-Space Aces Damage Calculator – models.py
-Version: drones-as-extra-lasers + proper Havoc/level scaling
+Data model and damage calculation logic for the Space Aces Damage Calculator.
 
-- Lasers im Lasers-Tab = Schiffslaser
-- lasers_on_drones_by_type = EXTRA-Laser auf Dronen (machen eigenen Schaden)
-- Dronen-Level + Havoc wirken nur auf Drone-Laser (nicht auf Schiffslaser)
-- Formationen, Saturn, Vandal, Booster wirken global auf alle Laser
+Drop this into app/sac_pages/models.py and import it as:
+
+    from sac_pages import models
 """
 
 import math
+import json
+import os
 
-# ------------------- Lasers -------------------
+# ------------------------------------------------------------------
+# Laser definitions
+# ------------------------------------------------------------------
 
 LASERS = {
     "LW3": {
         "name_en": "LW-3 (LF-3)",
         "base_damage": 240,
+        "base_damage_lvl16": 258.5,
         "shots_per_second": 1.0,
         "accuracy": 0.70,
-        "hidden_60": True,
+        "hidden_60": True,  # all except PR-L
     },
     "LW4": {
         "name_en": "LW-4 (LF-4)",
         "base_damage": 320,
+        "base_damage_lvl16": 344,
         "shots_per_second": 1.0,
         "accuracy": 0.70,
         "hidden_60": True,
@@ -31,20 +35,24 @@ LASERS = {
     "LW4U": {
         "name_en": "LW-4U (LF-4U)",
         "base_damage": 160,
-        "shots_per_second": 2.0,
+        "base_damage_lvl16": 172,
+        "shots_per_second": 2.0,  # 2 shots per second
         "accuracy": 0.70,
         "hidden_60": True,
     },
     "PRL": {
         "name_en": "PR-L (Prometheus)",
         "base_damage": 600,
-        "shots_per_second": 1.0 / 2.5,
+        "base_damage_lvl16": 645,
+        "shots_per_second": 1.0 / 2.5,  # one shot every 2.5 s
         "accuracy": 0.75,
         "hidden_60": False,
     },
 }
 
-# ------------------- Ammo -------------------
+# ------------------------------------------------------------------
+# Ammo definitions
+# ------------------------------------------------------------------
 
 AMMO = {
     "LPC11": {
@@ -89,7 +97,9 @@ AMMO = {
     },
 }
 
-# ------------------- Drones -------------------
+# ------------------------------------------------------------------
+# Drone definitions
+# ------------------------------------------------------------------
 
 DRONES = {
     "IRIS": {
@@ -131,7 +141,9 @@ DRONE_DESIGNS = {
     },
 }
 
-# ------------------- Formations -------------------
+# ------------------------------------------------------------------
+# Formations
+# ------------------------------------------------------------------
 
 FORMATIONS = {
     "NONE": {
@@ -184,7 +196,9 @@ FORMATIONS = {
     },
 }
 
-# ------------------- Rockets -------------------
+# ------------------------------------------------------------------
+# Rockets
+# ------------------------------------------------------------------
 
 ROCKETS = {
     "NONE": {
@@ -197,7 +211,7 @@ ROCKETS = {
         "name_en": "SIM-311 (R-310)",
         "base_damage": 3000,
         "accuracy": 0.95,
-        "shots_per_second": 1.0,
+        "shots_per_second": 1.0,  # approximation: one rocket per second
     },
     "S2S2026": {
         "name_en": "S2S-2026 (PLT-2026)",
@@ -261,7 +275,9 @@ RL_ROCKETS = {
     },
 }
 
-# ------------------- Skill helpers -------------------
+# ------------------------------------------------------------------
+# Skill tree helpers
+# ------------------------------------------------------------------
 
 def get_saturn_conqueror_mult(level: int) -> float:
     table = [0.0, 0.02, 0.04, 0.08, 0.16, 0.25]
@@ -269,6 +285,7 @@ def get_saturn_conqueror_mult(level: int) -> float:
 
 
 def get_bounty_hunter_mult(level: int) -> float:
+    # currently only placeholder for PvP
     table = [0.0, 0.02, 0.04, 0.04, 0.08, 0.12]
     return 1.0 + table[min(max(level, 0), 5)]
 
@@ -279,151 +296,183 @@ def get_rocket_engineering_mult(level: int) -> float:
 
 
 def get_missile_targeting_accuracy_bonus(level: int) -> float:
+    # 0, 2, 4, 6, 8, 10 % accuracy
     table = [0.0, 0.02, 0.04, 0.06, 0.08, 0.10]
     return table[min(max(level, 0), 5)]
 
-# ------------------- Laser DPS (Ship + Drone Lasers) -------------------
-
-def _compute_single_laser_group_dps(laser_type: str, count: int, upgrade_level: int, ammo_mult: float) -> float:
-    """Hilfsfunktion: DPS einer Lasergruppe."""
-    if count <= 0:
-        return 0.0
-    if laser_type not in LASERS:
-        return 0.0
-
-    laser_def = LASERS[laser_type]
-    base = laser_def["base_damage"]
-    base *= (1.0 + 0.005 * upgrade_level)  # 0.5 % pro Upgrade
-
-    if laser_def["hidden_60"]:
-        base *= 1.6
-
-    base *= ammo_mult
-    base *= laser_def["accuracy"]
-
-    return base * laser_def["shots_per_second"] * count
-
+# ------------------------------------------------------------------
+# Laser DPS core
+# ------------------------------------------------------------------
 
 def _laser_damage_per_second(state: dict) -> dict:
     """
-    Berechnet Laser-DPS aus:
-    - Ship-Lasern (laser_groups)
-    - extra Drone-Lasern (lasers_on_drones_by_type)
-    Multiplier:
-    - Formationen, Saturn, Vandal, Booster: global
-    - Dronen-Level + Havoc: nur auf Drone-Laser
+    Laser DPS including:
+    - ship lasers (laser_groups)
+    - drone lasers (lasers_on_drones_by_type)
+    - hidden 60 %% (except PR-L)
+    - upgrade level (0.5 %% per level)
+    - ammo multiplier
+    - accuracy
+    - drone level bonus (up to 10 %% at level 16)
+    - Havoc drone designs
+    - formation (Turtle, Heart, Barrier etc.)
+    - Saturn Conqueror (NPC laser skill)
+    - Vandal as global damage bonus
     """
-
-    groups = state["laser_groups"]
-    ammo_id = state["ammo"]
+    groups = state.get("laser_groups", [])
+    ammo_id = state.get("ammo", "LPC11")
     ammo = AMMO.get(ammo_id, AMMO["LPC11"])
-    mult_ammo = ammo["mult_pirate"] if state.get("target_is_pirate") else ammo["mult_normal"]
+    mult = ammo["mult_pirate"] if state.get("target_is_pirate") else ammo["mult_normal"]
 
-    # 1) Schiffslaser
-    raw_dps_ship = 0.0
-    total_ship_lasers = 0
+    # --- Ship lasers (on the ship only) ---
+    ship_raw_dps = 0.0
+    ship_laser_count = 0
+    upgrade_by_type: dict[str, list[int]] = {}
+
     for g in groups:
-        count = g["count"]
+        try:
+            count = int(g.get("count", 0))
+        except AttributeError:
+            continue
         if count <= 0:
             continue
-        lt = g["type"]
-        dps = _compute_single_laser_group_dps(lt, count, g["upgrade"], mult_ammo)
-        raw_dps_ship += dps
-        total_ship_lasers += count
+        laser_type = g.get("type", "LW3")
+        laser_def = LASERS.get(laser_type)
+        if not laser_def:
+            continue
+        lvl = int(g.get("upgrade", 0))
 
-    # 2) Drone-Laser (extra)
-    lod = state.get("lasers_on_drones_by_type") or {}
-    raw_dps_drones = 0.0
-    drone_lasers = 0
-    for lt, count in lod.items():
+        upgrade_by_type.setdefault(laser_type, []).append(lvl)
+
+        base = laser_def["base_damage"]
+        base *= 1.0 + 0.005 * lvl  # 0.5 % per level
+
+        if laser_def.get("hidden_60", False):
+            base *= 1.6
+
+        base *= mult
+        base *= laser_def.get("accuracy", 1.0)
+
+        dps_group = base * laser_def.get("shots_per_second", 1.0) * count
+        ship_raw_dps += dps_group
+        ship_laser_count += count
+
+    # --- Drone lasers (total, across all drones) ---
+    lasers_on_drones_by_type = state.get("lasers_on_drones_by_type", {})
+    drone_raw_dps = 0.0
+    drone_laser_count = 0
+
+    for laser_type, value in lasers_on_drones_by_type.items():
+        try:
+            count = int(value or 0)
+        except (TypeError, ValueError):
+            continue
         if count <= 0:
             continue
-        # Drone-Laser aktuell ohne Upgrade-Level (Upgrade = 0)
-        dps = _compute_single_laser_group_dps(lt, count, 0, mult_ammo)
-        raw_dps_drones += dps
-        drone_lasers += count
 
-    raw_dps_total = raw_dps_ship + raw_dps_drones
-    total_lasers = total_ship_lasers + drone_lasers
+        laser_def = LASERS.get(laser_type)
+        if not laser_def:
+            continue
 
-    # 3) Drone-Infos (Level + Havoc + Vandal)
-    drones_cfg = state["drones"]
+        # Use the highest upgrade level defined for this laser type on the ship,
+        # otherwise assume level 16 (common endgame case).
+        lvls = upgrade_by_type.get(laser_type, [])
+        lvl = max(lvls) if lvls else 16
+
+        base = laser_def["base_damage"]
+        base *= 1.0 + 0.005 * lvl
+
+        if laser_def.get("hidden_60", False):
+            base *= 1.6
+
+        base *= mult
+        base *= laser_def.get("accuracy", 1.0)
+
+        dps_group = base * laser_def.get("shots_per_second", 1.0) * count
+        drone_raw_dps += dps_group
+        drone_laser_count += count
+
+    raw_dps = ship_raw_dps + drone_raw_dps
+    total_lasers = ship_laser_count + drone_laser_count
+
+    # --- Drone bonuses (levels + Havoc) ---
+    drones_cfg = state.get("drones", {})
     drone_count = 0
-    sum_level_bonus = 0.0
-    sum_havoc_bonus = 0.0
+    laser_bonus_from_drones = 0.0
     vandal_drone_count = 0
+    total_possible_slots = 0
 
     for drone_id, drone_state in drones_cfg.items():
-        count = drone_state["count"]
+        try:
+            count = int(drone_state.get("count", 0))
+        except AttributeError:
+            continue
         if count <= 0:
             continue
+
+        drone_def = DRONES.get(drone_id)
+        if not drone_def:
+            continue
+
         drone_count += count
+        level = int(drone_state.get("level", 1))
+        level_bonus = 0.10 * (level / 16.0)  # linear approximation
 
-        level = drone_state["level"]
-        level_bonus = 0.10 * (level / 16.0)  # 10% auf Level 16
-
-        design_id = drone_state["design"]
+        design_id = drone_state.get("design", "NONE")
         design_def = DRONE_DESIGNS.get(design_id, DRONE_DESIGNS["NONE"])
-
         havoc_bonus = 0.0
-        if design_def["type"] == "laser":
+        if design_def.get("type") == "laser":
             havoc_bonus = design_def.get("laser_bonus", 0.0)
-
-        if design_def["type"] == "total":
+        if design_def.get("type") == "total":
             vandal_drone_count += count
 
-        sum_level_bonus += level_bonus * count
-        sum_havoc_bonus += havoc_bonus * count
+        laser_bonus_from_drones += (level_bonus + havoc_bonus) * count
+
+        total_possible_slots += count * int(drone_def.get("max_lasers", 0) or 0)
+
+    # How many lasers are actually treated as "on drones" for the multiplier:
+    lasers_on_drones = min(drone_laser_count, total_lasers, total_possible_slots)
+
+    if total_lasers > 0:
+        frac_on_drones = lasers_on_drones / total_lasers
+    else:
+        frac_on_drones = 0.0
 
     if drone_count > 0:
-        avg_level_bonus = sum_level_bonus / drone_count
-        avg_havoc_bonus = sum_havoc_bonus / drone_count
+        avg_bonus_per_drone = laser_bonus_from_drones / drone_count
     else:
-        avg_level_bonus = 0.0
-        avg_havoc_bonus = 0.0
+        avg_bonus_per_drone = 0.0
 
-    drone_specific_mult = 1.0 + avg_level_bonus + avg_havoc_bonus
+    drone_mult = 1.0 + frac_on_drones * avg_bonus_per_drone
 
-    # 4) Globale Multiplikatoren
-    formation = FORMATIONS[state["formation"]]
-    skills = state["skills"]
-    saturn_mult = get_saturn_conqueror_mult(skills.get("saturn_conqueror", 0))
-    formation_laser_global = formation["laser_global_mult"]
-    formation_npc_mult = formation["npc_laser_mult"]
+    # --- Formation + skills + Vandal ---
+    formation_id = state.get("formation", "NONE")
+    formation = FORMATIONS.get(formation_id, FORMATIONS["NONE"])
+    skills = state.get("skills", {})
+
+    saturn_mult = get_saturn_conqueror_mult(int(skills.get("saturn_conqueror", 0)))
+    formation_laser_global = formation.get("laser_global_mult", 1.0)
+    formation_npc_mult = formation.get("npc_laser_mult", 1.0)
 
     vandal_mult = 1.0
     if vandal_drone_count > 0:
         vandal_mult *= 1.0 + vandal_drone_count * DRONE_DESIGNS["VANDAL"]["total_bonus"]
 
-    booster_mult = 1.0 + float(state.get("damage_booster", 0.0))
-
-    global_mult = formation_laser_global * formation_npc_mult * saturn_mult * vandal_mult * booster_mult
-
-    # 5) End-DPS
-    ship_final = raw_dps_ship * global_mult
-    drone_final = raw_dps_drones * global_mult * drone_specific_mult
-    final_dps = ship_final + drone_final
-
-    if raw_dps_total > 0:
-        eff_mult = final_dps / raw_dps_total
-    else:
-        eff_mult = 0.0
+    total_laser_mult = drone_mult * formation_laser_global * formation_npc_mult * saturn_mult * vandal_mult
+    final_dps = raw_dps * total_laser_mult
 
     return {
         "dps": final_dps,
-        "raw_dps_no_mult": raw_dps_total,
+        "raw_dps_no_mult": raw_dps,
         "total_lasers": total_lasers,
-        "lasers_on_drones": drone_lasers,
-        "laser_multiplier": eff_mult,
+        "lasers_on_drones": lasers_on_drones,
+        "laser_multiplier": total_laser_mult,
         "drone_count": drone_count,
     }
 
-# ------------------- Rocket DPS -------------------
-
-def get_rocket_engineering_mult(level: int) -> float:
-    table = [0.0, 0.02, 0.04, 0.06, 0.08, 0.10]
-    return 1.0 + table[min(max(level, 0), 5)]
-
+# ------------------------------------------------------------------
+# Rocket DPS core
+# ------------------------------------------------------------------
 
 def _standard_rocket_dps(state: dict) -> float:
     rockets_cfg = state.get("rockets", {})
@@ -442,10 +491,14 @@ def _standard_rocket_dps(state: dict) -> float:
 
     dps = base * accuracy * rocket_def["shots_per_second"]
 
+    # formation rocket bonus
     formation = FORMATIONS[state["formation"]]
     dps *= formation["rocket_mult"]
+
+    # rocket engineering
     dps *= rocket_eng_mult
 
+    # Haunt-Voc drones bonus (+1.5 % per drone)
     drones_cfg = state["drones"]
     haunt_count = 0
     vandal_count = 0
@@ -463,9 +516,6 @@ def _standard_rocket_dps(state: dict) -> float:
         dps *= 1.0 + haunt_count * DRONE_DESIGNS["HAUNTVOC"]["rocket_bonus"]
     if vandal_count > 0:
         dps *= 1.0 + vandal_count * DRONE_DESIGNS["VANDAL"]["total_bonus"]
-
-    booster_mult = 1.0 + float(state.get("damage_booster", 0.0))
-    dps *= booster_mult
 
     return dps
 
@@ -487,17 +537,23 @@ def _rocket_launcher_dps(state: dict) -> float:
     rockets_per_second = launcher_def["rockets_per_burst"] / launcher_def["reload_seconds"]
 
     base = rocket_def["base_damage"]
-    accuracy = rocket_def["accuracy"]
+    accuracy = rocket_def["accuracy"]  # assumed 1.0
 
-    if rl_cfg.get("target_is_saturn", False):
+    # special bonus vs Saturn faction
+    target_is_saturn = rl_cfg.get("target_is_saturn", False)
+    if target_is_saturn:
         base *= (1.0 + rocket_def.get("bonus_vs_saturn", 0.0))
 
     dps = base * accuracy * rockets_per_second
 
+    # formation
     formation = FORMATIONS[state["formation"]]
     dps *= formation["rocket_mult"]
+
+    # rocket engineering
     dps *= rocket_eng_mult
 
+    # Haunt-Voc + Vandal
     drones_cfg = state["drones"]
     haunt_count = 0
     vandal_count = 0
@@ -516,16 +572,15 @@ def _rocket_launcher_dps(state: dict) -> float:
     if vandal_count > 0:
         dps *= 1.0 + vandal_count * DRONE_DESIGNS["VANDAL"]["total_bonus"]
 
-    booster_mult = 1.0 + float(state.get("damage_booster", 0.0))
-    dps *= booster_mult
-
     return dps
 
 
 def _rocket_damage_per_second(state: dict) -> float:
     return _standard_rocket_dps(state) + _rocket_launcher_dps(state)
 
-# ------------------- Public API -------------------
+# ------------------------------------------------------------------
+# Public API
+# ------------------------------------------------------------------
 
 def calculate_damage_overview(state: dict) -> dict:
     laser_info = _laser_damage_per_second(state)
@@ -548,3 +603,198 @@ def calculate_damage_overview(state: dict) -> dict:
         "total_lasers": laser_info["total_lasers"],
         "drone_count": laser_info["drone_count"],
     }
+
+
+# ------------------------------------------------------------------
+# NPC data + Farming Guide helpers
+# ------------------------------------------------------------------
+
+
+class NPC:
+    def __init__(self, npc_id, name, map_id, health, shields, reward_uri, reward_credits):
+        self.id = npc_id
+        self.name = name
+        self.map = map_id
+        self.health = int(health)
+        self.shields = int(shields)
+        self.reward_uri = reward_uri
+        self.reward_credits = reward_credits
+
+    @property
+    def total_hp(self) -> int:
+        return int(self.health) + int(self.shields)
+
+
+def _get_data_dir() -> str:
+    """
+    Returns the path to the 'data' folder next to sac_pages (where npcs.json should live).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(os.path.dirname(here), "data")
+    return data_dir
+
+
+def load_npcs() -> list:
+    """
+    Load NPC definitions from app/data/npcs.json.
+    Returns a list of NPC objects.
+    """
+    data_dir = _get_data_dir()
+    npc_file = os.path.join(data_dir, "npcs.json")
+    if not os.path.exists(npc_file):
+        return []
+
+    try:
+        with open(npc_file, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return []
+
+    npcs = []
+    for entry in raw:
+        try:
+            npcs.append(
+                NPC(
+                    npc_id=entry["id"],
+                    name=entry["name"],
+                    map_id=entry.get("map", ""),
+                    health=entry.get("health", 0),
+                    shields=entry.get("shields", 0),
+                    reward_uri=entry.get("reward_uri", 0),
+                    reward_credits=entry.get("reward_credits", 0),
+                )
+            )
+        except KeyError:
+            continue
+    return npcs
+
+
+NPC_MOD_NAME_MAP = {
+    "Streuner": "Streuner",
+    "Boss Streuner": "BossStreuner",
+    "Uber Streuner": "Uber Streuner",
+    "Luminid": "Lordakia",
+    "Boss Luminid": "Boss Lordakia",
+    "Uber Luminid": "Uber Lordakia",
+    "Sylox": "Saimon",
+    "Boss Sylox": "Boss Saimon",
+    "Uber Sylox": "Uber Saimon",
+    "Morlok": "Mordon",
+    "Boss Morlok": "Boss Mordon",
+    "Uber Morlok": "Uber Mordon",
+    "Dreadnex": "Devolarium",
+    "Boss Dreadnex": "Boss Devolarium",
+    "Uber Dreadnex": "Uber Devolarium",
+    "Sirelon": "Sibelon",
+    "Boss Sirelon": "Boss Sibelon",
+    "Uber Sirelon": "Uber Sibelon",
+    "Sirelonit": "Sibelonit",
+    "Boss Sirelonit": "Boss Sirelonit",
+    "Uber Sirelonit": "Uber Sirelonit",
+    "Luminar": "Lordakium",
+    "Boss Luminar": "Boss Lordakium",
+    "Uber Luminar": "Uber Lordakium",
+    "Crylith": "Kristallin",
+    "Boss Crylith": "Boss Kristallin",
+    "Uber Crylith": "Uber Kristallin",
+    "Crylox": "Kristallon",
+    "Boss Crylox": "Boss Kristallon",
+    "Uber Crylox": "Uber Kristallon",
+    "Cuboran": "Cubicon",
+    "Proteron": "Protegit",
+    "Streun3r": "Streun3r",
+    "Boss Streun3r": "Boss Streun3r",
+    "Uber Streun3r": "Uber Streun3r",
+}
+
+
+def get_display_npc_name(npc: NPC, use_mod_names: bool) -> str:
+    """
+    Returns the display name based on MOD setting.
+    """
+    if not use_mod_names:
+        return npc.name
+    return NPC_MOD_NAME_MAP.get(npc.name, npc.name)
+
+
+def suggest_best_npcs(total_dps: float, npcs: list, search_time: float = 5.0, top_n: int = 10):
+    """
+    Theoretical farming efficiency ranking.
+
+    We estimate:
+      - TTK (time-to-kill) = (HP + shield) / DPS
+      - cycle_time  = TTK + search_time
+      - kills/hour  = 3600 / cycle_time
+      - uri/hour    = kills/hour * reward_uri
+
+    Additionally we apply a simple overkill / slowkill penalty:
+      - Very small TTK  (< 3 s)  gets penalised (overkill)
+      - Very large TTK  (> 45 s) gets penalised (too slow)
+    """
+    if total_dps <= 0 or not npcs:
+        return []
+
+    # Clamp search_time to a sane range
+    try:
+        search_time_f = float(search_time)
+    except (TypeError, ValueError):
+        search_time_f = 5.0
+    search_time_f = max(0.0, min(search_time_f, 60.0))
+
+    results = []
+
+    for npc in npcs:
+        hp = max(1, npc.total_hp)
+        ttk = hp / total_dps if total_dps > 0 else 0.0
+
+        # Robust reward_uri handling (int or str)
+        raw_uri = getattr(npc, "reward_uri", 0)
+        try:
+            uri = int(raw_uri)
+        except (TypeError, ValueError):
+            uri = 0
+
+        if uri <= 0 or ttk <= 0:
+            uri_per_hour = 0.0
+            cycle_time = ttk + search_time_f if ttk > 0 else 0.0
+        else:
+            cycle_time = ttk + search_time_f
+            if cycle_time <= 0:
+                uri_per_hour = 0.0
+            else:
+                kills_per_hour = 3600.0 / cycle_time
+                uri_per_hour = kills_per_hour * uri
+
+        # Overkill / slowkill penalty on uri/hour
+        if ttk <= 0:
+            penalty = 0.0
+        else:
+            ideal_min = 3.0   # below this: overkill
+            ideal_max = 45.0  # above this: too slow
+            if ttk < ideal_min:
+                penalty = max(0.2, ttk / ideal_min)
+            elif ttk > ideal_max:
+                penalty = max(0.2, ideal_max / ttk)
+            else:
+                penalty = 1.0
+
+        score = uri_per_hour * penalty
+
+        results.append(
+            {
+                "npc": npc,
+                "hp": hp,
+                "ttk": ttk,
+                "cycle_time": cycle_time,
+                "uri": uri,
+                "uri_per_hour": uri_per_hour,
+                "score": score,
+            }
+        )
+
+    # Sort by score (desc)
+    results.sort(key=lambda r: r["score"], reverse=True)
+
+    if top_n and top_n > 0:
+        return results[:top_n]
+    return results

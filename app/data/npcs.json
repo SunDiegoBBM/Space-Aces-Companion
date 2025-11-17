@@ -1,0 +1,604 @@
+[
+  {
+    "id": "streuner",
+    "name": "Streuner",
+    "map": "X-1",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 800,
+    "shields": 400,
+    "reward_uri": "4",
+    "reward_credits": "400"
+  },
+  {
+    "id": "boss_streuner",
+    "name": "Boss Streuner",
+    "map": "X-1",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 3200,
+    "shields": 1600,
+    "reward_uri": "18",
+    "reward_credits": "1600"
+  },
+
+  {
+    "id": "luminid",
+    "name": "Luminid",
+    "map": "X-2",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 2000,
+    "shields": 2000,
+    "reward_uri": "9",
+    "reward_credits": "800"
+  },
+  {
+    "id": "boss_luminid",
+    "name": "Boss Luminid",
+    "map": "X-2",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 8000,
+    "shields": 8000,
+    "reward_uri": "35",
+    "reward_credits": "3200"
+  },
+
+  {
+    "id": "sylox",
+    "name": "Sylox",
+    "map": "X-3",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 6000,
+    "shields": 3000,
+    "reward_uri": "18",
+    "reward_credits": "1600"
+  },
+  {
+    "id": "boss_sylox",
+    "name": "Boss Sylox",
+    "map": "X-3",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 24000,
+    "shields": 12000,
+    "reward_uri": "70",
+    "reward_credits": "64000"
+  },
+  {
+    "id": "morlok",
+    "name": "Morlok",
+    "map": "X-3",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 20000,
+    "shields": 10000,
+    "reward_uri": "35",
+    "reward_credits": "6400"
+  },
+  {
+    "id": "dreadnex",
+    "name": "Dreadnex",
+    "map": "X-3",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 100000,
+    "shields": 100000,
+    "reward_uri": "70",
+    "reward_credits": "51200"
+  },
+  {
+    "id": "boss_dreadnex",
+    "name": "Boss Dreadnex",
+    "map": "X-3",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 400000,
+    "shields": 400000,
+    "reward_uri": "282",
+    "reward_credits": "204800"
+  },
+
+  {
+    "id": "sylox_x4",
+    "name": "Sylox",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 6000,
+    "shields": 3000,
+    "reward_uri": "18",
+    "reward_credits": "1600"
+  },
+  {
+    "id": "boss_sylox_x4",
+    "name": "Boss Sylox",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 24000,
+    "shields": 12000,
+    "reward_uri": "70",
+    "reward_credits": "6400"
+  },
+  {
+    "id": "morlok_x4",
+    "name": "Morlok",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 20000,
+    "shields": 10000,
+    "reward_uri": "35",
+    "reward_credits": "6400"
+  },
+  {
+    "id": "boss_morlok",
+    "name": "Boss Morlok",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 80000,
+    "shields": 40000,
+    "reward_uri": "141",
+    "reward_credits": "25600"
+  },
+  {
+    "id": "sirelon",
+    "name": "Sirelon",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 200000,
+    "shields": 200000,
+    "reward_uri": "141",
+    "reward_credits": "102400"
+  },
+  {
+    "id": "boss_sirelon",
+    "name": "Boss Sirelon",
+    "map": "X-4",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 800000,
+    "shields": 800000,
+    "reward_uri": "563",
+    "reward_credits": "409600"
+  },
+
+  {
+    "id": "luminid_x5",
+    "name": "Luminid",
+    "map": "X-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 2000,
+    "shields": 2000,
+    "reward_uri": "9",
+    "reward_credits": "800"
+  },
+  {
+    "id": "sirelonit",
+    "name": "Sirelonit",
+    "map": "X-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 160000,
+    "shields": 160000,
+    "reward_uri": "79",
+    "reward_credits": "12800"
+  },
+  {
+    "id": "boss_sirelonit",
+    "name": "Boss Sirelonit",
+    "map": "X-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 200000,
+    "shields": 200000,
+    "reward_uri": "317",
+    "reward_credits": "51200"
+  },
+  {
+    "id": "luminar",
+    "name": "Luminar",
+    "map": "X-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 300000,
+    "shields": 200000,
+    "reward_uri": "282",
+    "reward_credits": "204800"
+  },
+  {
+    "id": "boss_luminar",
+    "name": "Boss Luminar",
+    "map": "X-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1200000,
+    "shields": 800000,
+    "reward_uri": "1126",
+    "reward_credits": "819200"
+  },
+
+  {
+    "id": "crylith",
+    "name": "Crylith",
+    "map": "X-6",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 50000,
+    "shields": 40000,
+    "reward_uri": "88",
+    "reward_credits": "12800"
+  },
+  {
+    "id": "boss_crylith",
+    "name": "Boss Crylith",
+    "map": "X-6",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 200000,
+    "shields": 160000,
+    "reward_uri": "352",
+    "reward_credits": "51200"
+  },
+  {
+    "id": "crylox",
+    "name": "Crylox",
+    "map": "X-6",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 400000,
+    "shields": 300000,
+    "reward_uri": "422",
+    "reward_credits": "409600"
+  },
+  {
+    "id": "cuboran",
+    "name": "Cuboran",
+    "map": "X-6",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1600000,
+    "shields": 1200000,
+    "reward_uri": "2288",
+    "reward_credits": "2038400"
+  },
+  {
+    "id": "proteron",
+    "name": "Proteron",
+    "map": "X-6",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 60000,
+    "shields": 50000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+
+  {
+    "id": "crylith_x7",
+    "name": "Crylith",
+    "map": "X-7",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 50000,
+    "shields": 40000,
+    "reward_uri": "88",
+    "reward_credits": "12800"
+  },
+  {
+    "id": "crylox_x7",
+    "name": "Crylox",
+    "map": "X-7",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 400000,
+    "shields": 300000,
+    "reward_uri": "422",
+    "reward_credits": "409600"
+  },
+  {
+    "id": "boss_crylox_x7",
+    "name": "Boss Crylox",
+    "map": "X-7",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1600000,
+    "shields": 1200000,
+    "reward_uri": "1690",
+    "reward_credits": "1638400"
+  },
+
+  {
+    "id": "streun3r",
+    "name": "Streun3r",
+    "map": "X-8",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 40000,
+    "shields": 30000,
+    "reward_uri": "88",
+    "reward_credits": "12800"
+  },
+  {
+    "id": "boss_streun3r",
+    "name": "Boss Streun3r",
+    "map": "X-8",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 160000,
+    "shields": 120000,
+    "reward_uri": "352",
+    "reward_credits": "512000"
+  },
+
+  {
+    "id": "1100101",
+    "name": "1100101",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1600000,
+    "shields": 1200000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+
+  {
+    "id": "boss_streuner_b5",
+    "name": "Boss Streuner",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 3200,
+    "shields": 1600,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_streuner",
+    "name": "Uber Streuner",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 6400,
+    "shields": 3200,
+    "reward_uri": "35",
+    "reward_credits": "3200"
+  },
+
+  {
+    "id": "boss_luminid_b5",
+    "name": "Boss Luminid",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 8000,
+    "shields": 8000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_luminid",
+    "name": "Uber Luminid",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 16000,
+    "shields": 16000,
+    "reward_uri": "70",
+    "reward_credits": "6400"
+  },
+
+  {
+    "id": "boss_sylox_b5",
+    "name": "Boss Sylox",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 24000,
+    "shields": 12000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_sylox",
+    "name": "Uber Sylox",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 48000,
+    "shields": 24000,
+    "reward_uri": "141",
+    "reward_credits": "12800"
+  },
+
+  {
+    "id": "boss_morlok_b5",
+    "name": "Boss Morlok",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 80000,
+    "shields": 40000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_morlok",
+    "name": "Uber Morlok",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 160000,
+    "shields": 80000,
+    "reward_uri": "282",
+    "reward_credits": "51200"
+  },
+
+  {
+    "id": "boss_dreadnex_b5",
+    "name": "Boss Dreadnex",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 400000,
+    "shields": 400000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_dreadnex",
+    "name": "Uber Dreadnex",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 800000,
+    "shields": 800000,
+    "reward_uri": "563",
+    "reward_credits": "409600"
+  },
+
+  {
+    "id": "boss_sirelon_b5",
+    "name": "Boss Sirelon",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 800000,
+    "shields": 800000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_sirelon",
+    "name": "Uber Sirelon",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1600000,
+    "shields": 1600000,
+    "reward_uri": "1126",
+    "reward_credits": "819200"
+  },
+
+  {
+    "id": "boss_sirelonit_b5",
+    "name": "Boss Sirelonit",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 200000,
+    "shields": 200000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_sirelonit",
+    "name": "Uber Sirelonit",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 320000,
+    "shields": 320000,
+    "reward_uri": "634",
+    "reward_credits": "102400"
+  },
+
+  {
+    "id": "boss_luminar_b5",
+    "name": "Boss Luminar",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1200000,
+    "shields": 800000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_luminar",
+    "name": "Uber Luminar",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 2400000,
+    "shields": 1600000,
+    "reward_uri": "2253",
+    "reward_credits": "1638400"
+  },
+
+  {
+    "id": "boss_crylith_b5",
+    "name": "Boss Crylith",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 200000,
+    "shields": 160000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_crylith",
+    "name": "Uber Crylith",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 400000,
+    "shields": 320000,
+    "reward_uri": "704",
+    "reward_credits": "102400"
+  },
+
+  {
+    "id": "boss_crylox_b5",
+    "name": "Boss Crylox",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 1600000,
+    "shields": 1200000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_crylox",
+    "name": "Uber Crylox",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 3200000,
+    "shields": 2400000,
+    "reward_uri": "3379",
+    "reward_credits": "3276800"
+  },
+
+  {
+    "id": "boss_streun3r_b5",
+    "name": "Boss Streun3r",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 160000,
+    "shields": 120000,
+    "reward_uri": "0",
+    "reward_credits": "0"
+  },
+  {
+    "id": "uber_streun3r",
+    "name": "Uber Streun3r",
+    "map": "B-5",
+    "faction": "npc",
+    "is_pirate": false,
+    "health": 320000,
+    "shields": 240000,
+    "reward_uri": "704",
+    "reward_credits": "102400"
+  }
+]
